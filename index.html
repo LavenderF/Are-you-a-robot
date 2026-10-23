@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Robot reCAPTCHA — Nightmare Mode</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color-scheme:light;--blue:#4285f4;--ink:#202124}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#fff;display:flex;align-items:flex-start;justify-content:center;color:var(--ink)}
+.app{width:min(100%,520px);display:flex;flex-direction:column;align-items:center;padding:60px 12px 30px}
+.stage{position:relative;width:302px;flex:0 0 auto}
+.anchor{width:302px;height:76px;display:flex;align-items:center;background:#f9f9f9;border:1px solid #d3d3d3;border-radius:2px;box-shadow:0 1px 4px #0001;user-select:none}
+.tick-target{border:0;background:none;padding:0;width:76px;height:74px;display:grid;place-items:center;cursor:pointer}
+.square{width:28px;height:28px;border:2px solid #c1c1c1;border-radius:2px;background:#fff;display:grid;place-items:center;transition:border-color .16s}
+.tick-target:hover .square{border-color:#939393}
+.square.loading{border-color:#e3e3e3;border-top-color:#4285f4;border-radius:50%;animation:spin .9s linear infinite}
+.square.checked{border:0;background:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.prompt{cursor:pointer;font-size:14px;line-height:1.2;white-space:nowrap;margin-left:1px;flex:1}
+.brand{width:82px;height:74px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding-top:1px}
+.brand-logo{width:33px;height:33px}
+.brand-name{font-size:10px;color:#555;line-height:12px}
+.brand-links{font-size:8px;color:#555;line-height:12px;white-space:nowrap}
+.panel{position:absolute;top:87px;left:-44px;width:402px;padding:7px;background:white;border:1px solid #d5d5d5;box-shadow:0 2px 10px #0004;z-index:5;display:none}
+.panel.open{display:block;animation:appear .13s ease-out}
+@keyframes appear{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.panel::before{content:"";position:absolute;top:-9px;left:78px;width:15px;height:15px;transform:rotate(45deg);background:white;border-top:1px solid #d5d5d5;border-left:1px solid #d5d5d5}
+.blue-head{min-height:122px;background:#4285f4;color:white;padding:15px 21px 13px;position:relative}
+.header-meta{font-size:10px;font-weight:700;letter-spacing:1.1px;opacity:.83;margin-bottom:8px;display:flex;justify-content:space-between}
+.head-small{display:block;font-size:15px;line-height:18px}
+.head-big{display:block;font-size:25px;line-height:28px;font-weight:700;margin-top:2px;overflow-wrap:anywhere}
+.head-note{display:block;font-size:11px;line-height:15px;opacity:.96;margin-top:6px}
+
+.asm-spec{display:none;margin:6px 0 0;padding:11px 13px;background:#111d2a;color:#a9f2bc;border-left:3px solid #61c894;font:11px/1.52 "SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow:auto;max-height:192px;tab-size:4;letter-spacing:.05px}
+.asm-spec::-webkit-scrollbar,.python-code::-webkit-scrollbar{width:7px;height:7px}
+.asm-spec::-webkit-scrollbar-thumb,.python-code::-webkit-scrollbar-thumb{background:#536679;border-radius:4px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:100%;aspect-ratio:1;margin-top:6px}
+.tile{border:0;position:relative;overflow:hidden;padding:0;background:#758493;cursor:pointer;min-width:0}
+.tile img{display:block;width:100%;height:100%;object-fit:cover;image-rendering:auto;transition:transform .14s ease}
+.tile:focus-visible,.answer:focus-visible,.verify:focus-visible{outline:3px solid #fbbc04;outline-offset:2px}
+.tile.sel{box-shadow:inset 0 0 0 7px #4285f4;background:#4285f4;padding:7px}
+.tile.sel::after{content:'✓';position:absolute;top:1px;left:1px;width:26px;height:26px;border-radius:50%;background:#4285f4;color:#fff;font-weight:bold;font-size:21px;line-height:26px;text-align:center;box-shadow:0 1px 3px #3335}
+.tile .diagnostic{position:absolute;left:0;right:0;bottom:0;min-height:21px;display:flex;align-items:center;justify-content:center;background:#081421e8;border-top:1px solid #69f0ad66;color:#a2ffca;font:10px/1.2 Consolas,"Liberation Mono",monospace;letter-spacing:.1px;padding:3px 1px;pointer-events:none}
+.tile.sel .diagnostic{left:7px;right:7px;bottom:7px}
+.legend{margin-top:6px;display:flex;align-items:center;justify-content:space-between;font-size:10px;line-height:14px;color:#5f6368;gap:8px}
+.legend strong{font-weight:600;color:#387452}
+.py-stage{display:none;margin-top:6px;min-height:386px;background:#f8f9fa;padding:15px 13px 12px}
+.terminal-tag{font:11px Consolas,monospace;color:#75818d;letter-spacing:1px;margin-bottom:10px}
+.python-code{white-space:pre;overflow:auto;max-height:249px;background:#17212f;color:#d6f7e7;font:11px/1.55 "SFMono-Regular",Consolas,"Liberation Mono",monospace;padding:17px 15px;border-radius:3px;border-left:3px solid #8ad8ff;min-height:92px;margin:0 0 14px}
+.python-code .prompt-arrow{color:#7cb4ff}
+.answer-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.answer{white-space:pre-wrap;font:11px/1.45 Consolas,"Liberation Mono",monospace;text-align:left;border:1px solid #dce0e5;border-radius:2px;background:#fff;padding:10px 12px;min-height:41px;color:#23303b;cursor:pointer;overflow-wrap:anywhere}
+.answer:hover{border-color:#8ca8d5;background:#f5faff}
+.answer.sel{background:#e9f1ff;border:2px solid #4285f4;padding:9px 11px}
+.py-footnote{font-size:10px;line-height:1.5;color:#6a7680;margin-top:13px}
+.feedback{white-space:pre-wrap;font-size:12px;color:#d93025;min-height:18px;padding:5px 2px 0;line-height:1.45}
+.feedback.ok{color:#188038;font-weight:600}
+.footer{height:58px;display:flex;align-items:center;border-top:1px solid #e5e5e5;margin-top:5px;padding:0 1px}
+.tool{height:35px;width:38px;border:0;background:transparent;color:#777;display:grid;place-items:center;cursor:pointer;border-radius:2px}
+.tool:hover,.tool.active{background:#e7f0ff;color:#2568cf}
+.tool svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.verify{margin-left:auto;background:#4285f4;color:white;font-size:14px;border:0;height:36px;min-width:100px;padding:0 16px;font-weight:500;cursor:pointer;border-radius:2px;box-shadow:0 1px 2px #0002}
+.verify:hover{background:#3779e0}
+.verify:active{background:#2a65c6}
+.verify[disabled]{background:#adc8f5;cursor:not-allowed}
+.status{width:302px;margin-top:22px;color:#53616a}
+.status-top{display:flex;justify-content:space-between;gap:12px;align-items:center;font:10px/1.3 Consolas,monospace;letter-spacing:.45px}
+.status-top strong{color:#366ac3}
+.progress-track{margin-top:7px;height:4px;background:#edf0f4;border-radius:20px;overflow:hidden}
+.progress-fill{height:100%;width:0%;background:#4285f4;transition:width .3s}
+.stats{display:flex;justify-content:space-between;font-size:11px;color:#7b858c;margin-top:10px}
+.success-note{margin-top:17px;color:#188038;font-size:13px;min-height:16px;text-align:center}
+.lower{margin-top:9px;width:355px;max-width:100%;text-align:center}
+.lower button{border:0;color:#5f6368;background:none;text-decoration:underline;text-underline-offset:3px;font-size:12px;padding:5px 9px;cursor:pointer}
+.lower p{font-size:11px;color:#9b9b9b;line-height:1.7;margin:11px 0 0}
+.small-tip{font-size:11px;line-height:1.7;color:#7e858e;margin-top:16px;width:302px;text-align:center;white-space:pre-line}
+.lower p{white-space:pre-line}
+.tickboard-wrap{width:302px;margin-top:16px;color:#53616a}
+.tickboard-head{display:flex;justify-content:space-between;gap:10px;align-items:center;font:10px/1.3 Consolas,monospace;letter-spacing:.45px;margin-bottom:8px}
+.tickboard-head strong{color:#188038}
+.tickboard{display:grid;grid-template-columns:repeat(16,1fr);gap:4px}
+.tickcell{height:14px;border:1px solid #d0d7de;border-radius:2px;background:#fff;display:grid;place-items:center;font:9px/1 Arial,sans-serif;color:transparent;user-select:none}
+.tickcell.done{border-color:#8fd0ab;background:#e9f7ef;color:#188038}
+.tickcell.current{border-color:#4285f4;box-shadow:inset 0 0 0 1px #4285f4;background:#eef4ff}
+.tickcell.future{background:#f7f8fa}
+.certificate-box{width:302px;margin-top:16px;padding:12px 13px;border:1px solid #dadce0;background:#f8fafb;border-radius:4px;display:none}
+.certificate-box.show{display:block}
+.certificate-title{font:700 11px/1.4 Consolas,monospace;color:#23303b;letter-spacing:.6px;margin-bottom:6px}
+.certificate-meta{font:11px/1.6 Consolas,monospace;color:#4f5b66;white-space:pre-wrap;margin-bottom:10px}
+.cert-btn{width:100%;border:0;background:#111d2a;color:#a9f2bc;font:700 12px/1.2 Consolas,monospace;padding:12px 14px;border-radius:3px;cursor:pointer;letter-spacing:.3px}
+.cert-btn:hover{background:#18283a}
+
+.identity-box{width:302px;margin-top:19px;border:1px solid #d5dde4;padding:13px 14px 15px;background:linear-gradient(180deg,#fcfdff,#f5f8fc);border-radius:4px}
+.identity-heading{font:700 11px/1.35 Consolas,monospace;color:#2a3b4d;letter-spacing:1.1px;margin-bottom:12px}
+.identity-box label{display:block;font:700 10px/1.4 Consolas,monospace;letter-spacing:.6px;color:#506377;margin:10px 0 5px}
+.identity-box input{display:block;width:100%;border:1px solid #cad2db;background:white;color:#142334;padding:10px 11px;border-radius:3px;font:12px/1.3 Consolas,monospace;outline:none}
+.identity-box input:focus{border-color:#4285f4;box-shadow:0 0 0 2px #dceaff}
+.identity-note{font:10px/1.55 Consolas,monospace;color:#788492;margin:10px 0 0}
+.certificate-box{display:block;background:#0a111b;border:1px solid #263743;padding:17px 16px 15px;color:#c1efcf;box-shadow:0 2px 8px #15252d18}
+.certificate-box.show{display:block;border-color:#7abb62}
+.certificate-title{color:#d6fbd2;font:700 11px/1.5 Consolas,monospace;letter-spacing:1px}
+.certificate-meta{color:#9aacb4;font:11px/1.75 Consolas,monospace;margin:10px 0 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.cert-tier{font:700 11px/1.4 Consolas,monospace;color:#caff67;letter-spacing:.4px;overflow-wrap:anywhere}
+.cert-lock{font:10px/1.5 Consolas,monospace;color:#93a1b0;margin:9px 0}
+.cert-btn{background:#b4ff5c;color:#0c1811;min-height:42px}
+.cert-btn:hover:not(:disabled){background:#d2ff96}
+.cert-btn:disabled{background:#1e2b33;border:1px dashed #4d5f6a;color:#7c919a;cursor:not-allowed}
+.cert-display{height:3px;background:repeating-linear-gradient(90deg,#aaf158 0 12px, transparent 12px 16px);margin:13px 0 15px;opacity:.65}
+
+@media(min-width:630px){.app{padding-top:65px}}
+@media(max-width:450px){.app{padding-top:38px}.panel{left:calc((302px - min(388px, 100vw - 16px))/2);width:min(388px,calc(100vw - 16px))}.blue-head{padding:14px 17px}.head-big{font-size:23px}.tile .diagnostic{font-size:9px}.panel::before{left:calc((100% - 15px)/2 - 74px)}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<main class="app">
+<div class="stage">
+    <div class="anchor" aria-label="Parody robot verification">
+      <button type="button" class="tick-target" id="tick" aria-label="I am a robot — start verification" aria-pressed="false"><span id="square" class="square"></span></button>
+      <div class="prompt" id="prompt">I'm a robot</div>
+      <div class="brand" aria-label="reCAPTCHA-inspired demo branding">
+        <svg class="brand-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285f4" d="M23 3A21 21 0 0 1 44 22h-8A13 13 0 0 0 23 11c-4 0-8 2-10 5l6 4H3V4l5 6A21 21 0 0 1 23 3Z"/><path fill="#9ba3ad" d="M25 45A21 21 0 0 1 4 26h8a13 13 0 0 0 13 11c5 0 9-2 11-6l-6-4h15v17l-5-6a21 21 0 0 1-15 7Z"/><path fill="#2867cc" d="M36 22h8v-1l-8 0z"/></svg>
+        <span class="brand-name">reCAPTCHA</span><span class="brand-links">Privacy - Terms</span>
+      </div>
+    </div>
+    <section class="panel" id="panel" aria-label="Robot multi-stage verification">
+      <div class="blue-head">
+        <div class="header-meta"><span id="stage-tag">section .text</span><span id="level-num">001 / 256</span></div>
+        <span class="head-small" id="head-small">BITS 64 · RGBA8888</span>
+        <span class="head-big" id="head-big">CRC32_SCAN</span>
+        <span class="head-note" id="head-note">cmp eax, 0x00000000</span>
+      </div>
+      <pre class="asm-spec" id="asm-spec" aria-label="x86-64 assembly challenge"></pre>
+      <div class="tiles" id="tiles"></div>
+      <div class="py-stage" id="py-stage"><div class="terminal-tag">x86-64 · NASM · CPYTHON 3.13 · BINARY64</div><pre class="python-code" id="python-code"></pre><div class="answer-grid" id="answers"></div><div class="py-footnote" id="py-footnote">section .rodata | output: db ... , 0x00</div></div>
+      <div class="legend" id="legend"><span id="legend-left">setne byte [flags+r12]</span><strong id="legend-right">DIAG=0x00</strong></div>
+      <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+      <div class="footer">
+        <button class="tool" id="refresh" aria-label="Regenerate this image challenge" title="Regenerate this image challenge"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.2 6.1M20 4v7h-7"/></svg></button>
+        <button class="tool" id="machine" aria-pressed="false" aria-label="Toggle machine vision diagnostics" title="Machine Vision"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 3v3M20 18v3"/></svg></button>
+        <button class="tool" id="help" aria-label="Help" title="Help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button>
+        <button class="verify" id="verify">VERIFY</button>
+      </div>
+    </section>
+  </div>
+  <div class="status"><div class="status-top"><span id="protocol-label">ROBOT VERIFICATION PROTOCOL</span><strong id="progress-caption">0 / 256</strong></div><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div><div class="stats"><span id="stage-kind">256 stages · ∞ mode</span><span id="attempts">0 failed attempts</span></div></div>
+  <div class="tickboard-wrap"><div class="tickboard-head"><span id="tickboard-label">STAGE CHECKMARK REGISTER</span><strong id="tickboard-count">0 / 256</strong></div><div class="tickboard" id="tickboard" aria-label="Stage completion grid"></div></div>
+  <div class="success-note" id="success" role="status"></div>
+  <section class="identity-box" aria-label="Identity registry"><div class="identity-heading">[ OPERATOR / UNIT REGISTRY ]</div>
+    <label for="player-name">PLAYER NAME</label><input type="text" id="player-name" maxlength="36" autocomplete="nickname" spellcheck="false" placeholder="e.g. Ada Lovelace" aria-label="Player name for certificate" />
+    <label for="robot-id">ROBOT ID</label><input type="text" id="robot-id" maxlength="28" autocomplete="off" spellcheck="false" placeholder="e.g. RX-0000-ALPHA" aria-label="Robot ID for certificate" />
+    <p class="identity-note">Stored only in this browser. Printed on the earned certificate.</p>
+  </section>
+  <section class="certificate-box" id="certificate-box" aria-label="Robot certificate"><div class="certificate-title" id="certificate-title">[ CERTIFICATE / LOCKED ]</div>
+    <div class="cert-display" aria-hidden="true"></div><div class="cert-tier" id="cert-tier">OMEGA ZERO</div>
+    <div class="certificate-meta" id="certificate-meta">Awaiting completion of all 256 stages.</div>
+    <div class="cert-lock" id="cert-lock">PDF RELEASE CONDITION: 256 / 256 PASSED</div>
+    <button type="button" class="cert-btn" id="download-cert" disabled>PDF GENERATION LOCKED</button>
+  </section>
+  <div class="small-tip" id="small-tip">Pixel-level differences may be invisible to humans.
+Use the eye button to enable machine-vision diagnostics.</div>
+  <div class="lower"><button type="button" id="resume">Resume current stage</button><button type="button" id="reset">Reset all progress</button><p id="disclaimer">Standalone reCAPTCHA-style reverse verification game · Not affiliated with Google
+Runs offline · Saves progress locally · 256 stages + endless mode</p></div>
+</main>
+<script>
+(() => {
+'use strict';
+const TOTAL = 256, W = 168, H = 168;
+const FLOAT_BANK = [{"code":"0.1 + 0.2","correct":"0.30000000000000004","choices":["0.30000000000000004","0.3","0.3000000000000001","0.29999999999999999"]},{"code":"0.1 + 0.2 == 0.3","correct":"False","choices":["False","True","None","0.3"]},{"code":"0.3 - 0.2 == 0.1","correct":"False","choices":["False","True","None","0.1"]},{"code":"0.1 * 3 == 0.3","correct":"False","choices":["False","True","None","0.3"]},{"code":"sum([0.1] * 10)","correct":"1.0","choices":["1.0","0.9999999999999998","1.0000000000000002","0"]},{"code":"math.fsum([0.1] * 10)","correct":"1.0","choices":["1.0","0.9999999999999999","1.0000000000000002","0.1"]},{"code":"round(2.675, 2)","correct":"2.67","choices":["2.67","2.68","2.675","2.66"]},{"code":"round(1.005, 2)","correct":"1.0","choices":["1.0","1.01","1.005","1.001"]},{"code":"round(2.5)","correct":"2","choices":["2","3","2.5","1"]},{"code":"round(3.5)","correct":"4","choices":["4","3","3.5","5"]},{"code":"round(-2.5)","correct":"-2","choices":["-2","-3","-2.5","2"]},{"code":"round(0.5)","correct":"0","choices":["0","1","0.5","-1"]},{"code":"round(1.5)","correct":"2","choices":["2","1","1.5","3"]},{"code":"round(-1.5)","correct":"-2","choices":["-2","-1","-1.5","2"]},{"code":"round(0.125, 2)","correct":"0.12","choices":["0.12","0.13","0.125","0.11"]},{"code":"round(0.375, 2)","correct":"0.38","choices":["0.38","0.37","0.375","0.39"]},{"code":"float(\"nan\") == float(\"nan\")","correct":"False","choices":["False","True","None","nan"]},{"code":"float(\"nan\") != float(\"nan\")","correct":"True","choices":["True","False","None","nan"]},{"code":"bool(float(\"nan\"))","correct":"True","choices":["True","False","None","ValueError"]},{"code":"1e16 + 1 == 1e16","correct":"True","choices":["True","False","None","1"]},{"code":"(1e16 + 1) - 1e16","correct":"0.0","choices":["0.0","1.0","-1.0","1e-16"]},{"code":"(1e16 - 1e16) + 1","correct":"1.0","choices":["1.0","0.0","1e-16","2.0"]},{"code":"float(2**53 + 1) == float(2**53)","correct":"True","choices":["True","False","None","9007199254740993.0"]},{"code":"float(2**53 + 1)","correct":"9007199254740992.0","choices":["9007199254740992.0","9007199254740993.0","9007199254740994.0","OverflowError"]},{"code":"float(2**53 - 1)","correct":"9007199254740991.0","choices":["9007199254740991.0","9007199254740992.0","9007199254740990.0","OverflowError"]},{"code":"10 * 0.1 == 1.0","correct":"True","choices":["True","False","None","1.0000000000000002"]},{"code":"sum([0.1]*10) == 1.0","correct":"True","choices":["True","None","0.9999999999999999","0"]},{"code":"math.fsum([0.1]*10) == 1.0","correct":"True","choices":["True","False","None","0.9999999999999999"]},{"code":"0.1 + 0.2 > 0.3","correct":"True","choices":["True","False","None","0.3"]},{"code":"0.1 + 0.2 - 0.3","correct":"5.551115123125783e-17","choices":["5.551115123125783e-17","0.0","-5.551115123125783e-17","1e-16"]},{"code":"1.0 + 2**-53 == 1.0","correct":"True","choices":["True","False","None","1.0000000000000002"]},{"code":"1.0 + 2**-52 == 1.0","correct":"False","choices":["False","True","None","1.0"]},{"code":"1.0 + 2**-52","correct":"1.0000000000000002","choices":["1.0000000000000002","1.0","1.0000000000000004","1.000000000000001"]},{"code":"math.ulp(1.0)","correct":"2.220446049250313e-16","choices":["2.220446049250313e-16","1e-16","1.1102230246251565e-16","0.0"]},{"code":"math.ulp(0.0)","correct":"5e-324","choices":["5e-324","0.0","2.220446049250313e-16","1e-323"]},{"code":"math.nextafter(1.0, 2.0)","correct":"1.0000000000000002","choices":["1.0000000000000002","1.0","1.0000000000000001","1.0000000000000004"]},{"code":"math.nextafter(1.0, 0.0)","correct":"0.9999999999999999","choices":["0.9999999999999999","1.0","1.0000000000000002","0.9999999999999998"]},{"code":"0.0 == -0.0","correct":"True","choices":["True","False","None","ValueError"]},{"code":"math.copysign(1, -0.0)","correct":"-1.0","choices":["-1.0","1.0","-0.0","-1"]},{"code":"(-0.0).hex()","correct":"'-0x0.0p+0'","choices":["'-0x0.0p+0'","'0x0.0p+0'","'-0.0'","'-0x1.0p+0'"]},{"code":"(0.1).as_integer_ratio()","correct":"(3602879701896397, 36028797018963968)","choices":["(3602879701896397, 36028797018963968)","(1, 10)","(3602879701896396, 36028797018963968)","(1, 9)"]},{"code":"(0.1).hex()","correct":"'0x1.999999999999ap-4'","choices":["'0x1.999999999999ap-4'","'0x1.9999999999999p-4'","'0x1.999999999999ap-3'","'0x0.1p+0'"]},{"code":"math.isclose(0.1 + 0.2, 0.3)","correct":"True","choices":["True","False","None","0.3"]},{"code":"math.isclose(0.1 + 0.2, 0.3, rel_tol=0, abs_tol=0)","correct":"False","choices":["False","True","None","0.3"]},{"code":"format(0.1, \".17f\")","correct":"'0.10000000000000001'","choices":["'0.10000000000000001'","'0.10000000000000000'","'0.1'","'0.10000000000000002'"]},{"code":"format(0.3, \".17f\")","correct":"'0.29999999999999999'","choices":["'0.29999999999999999'","'0.30000000000000000'","'0.3'","'0.30000000000000001'"]},{"code":"float(\"inf\") - float(\"inf\")","correct":"nan","choices":["nan","inf","0.0","ZeroDivisionError"]},{"code":"float(\"inf\") == float(\"inf\")","correct":"True","choices":["True","False","None","nan"]},{"code":"0.1 + 0.2 + 0.3 == 0.6","correct":"False","choices":["False","True","None","0.6"]},{"code":"1e-324 == 0.0","correct":"True","choices":["True","False","None","1e-324"]},{"code":"5e-324 > 0.0","correct":"True","choices":["True","False","None","5e-324"]},{"code":"round(1.2345, 3)","correct":"1.234","choices":["1.234","1.235","1.233","1.2345"]},{"code":"float.fromhex(\"0x1.0000000000001p+0\") - 1","correct":"2.220446049250313e-16","choices":["2.220446049250313e-16","0.0","1e-16","4.440892098500626e-16"]},{"code":"float(2**53) + 1.0 == float(2**53)","correct":"True","choices":["True","False","None","1.0"]},{"code":"float(2**53) + 2.0 == float(2**53)","correct":"False","choices":["False","True","None","9007199254740993.0"]},{"code":"float(2**53 + 2) - float(2**53)","correct":"2.0","choices":["2.0","1.0","0.0","3.0"]},{"code":"round(-0.5)","correct":"0","choices":["0","-1","-0.5","1"]},{"code":"round(-3.5)","correct":"-4","choices":["-4","-3","-3.5","3"]},{"code":"abs(-0.0)","correct":"0.0","choices":["0.0","-0.0","1.0","False"]},{"code":"repr(-0.0)","correct":"'-0.0'","choices":["'-0.0'","'0.0'","'-0'","'0'"]},{"code":"(-0.0) * 1.0","correct":"-0.0","choices":["-0.0","0.0","0","-1.0"]},{"code":"math.frexp(0.75)","correct":"(0.75, 0)","choices":["(0.75, 0)","(3, -2)","(0.5, 1)","0"]},{"code":"math.ldexp(0.5, -1)","correct":"0.25","choices":["0.25","1.0","0.5","0.125"]},{"code":"math.isfinite(float(\"nan\"))","correct":"False","choices":["False","True","None","TypeError"]},{"code":"math.isnan(float(\"inf\"))","correct":"False","choices":["False","True","None","TypeError"]},{"code":"round(0.15, 1)","correct":"0.1","choices":["0.1","0.2","0.15","0.0"]},{"code":"round(0.25, 1)","correct":"0.2","choices":["0.2","0.3","0.25","0.0"]},{"code":"round(0.35, 1)","correct":"0.3","choices":["0.3","0.35","0.2","0"]},{"code":"round(0.45, 1)","correct":"0.5","choices":["0.5","0.4","0.45","0.6"]},{"code":"0.1 * 10 - 1.0","correct":"0.0","choices":["0.0","-1.1102230246251565e-16","1.1102230246251565e-16","0.1"]},{"code":"sum([0.1]*3) == (0.1*3)","correct":"True","choices":["True","False","None","0.3"]},{"code":"math.fsum([0.1]*3) == (0.1*3)","correct":"True","choices":["True","None","0.3","0"]},{"code":"float(2**53 + 3)","correct":"9007199254740996.0","choices":["9007199254740996.0","9007199254740995.0","9007199254740994.0","9007199254740993.0"]},{"code":"float(2**53 + 4)","correct":"9007199254740996.0","choices":["9007199254740996.0","9007199254740995.0","9007199254740997.0","9007199254740992.0"]},{"code":"math.nextafter(0.0, 1.0)","correct":"5e-324","choices":["5e-324","0.0","1e-323","2.220446049250313e-16"]},{"code":"math.nextafter(0.0, -1.0)","correct":"-5e-324","choices":["-5e-324","0.0","5e-324","-1e-323"]},{"code":"round(4.5)","correct":"4","choices":["4","5","4.5","3"]},{"code":"round(5.5)","correct":"6","choices":["6","5","5.5","7"]}];
+const $ = id => document.getElementById(id);
+const el = Object.fromEntries(['tick','square','prompt','panel','tiles','py-stage','python-code','asm-spec','answers','feedback','verify','head-small','head-big','head-note','level-num','stage-tag','legend','legend-left','legend-right','machine','success','progress-caption','progress-fill','stage-kind','attempts','refresh','tickboard','tickboard-count','tickboard-label','certificate-box','certificate-meta','download-cert','player-name','robot-id','certificate-title','cert-tier','cert-lock'].map(id=>[id,$(id)]));
+const STRINGS = {
+  "title": "Robot reCAPTCHA — Nightmare Mode",
+  "anchor": "Parody robot verification",
+  "checkboxAria": "I am a robot — start verification",
+  "checkbox": "I'm a robot",
+  "brand": "Unofficial reCAPTCHA-inspired game",
+  "brandLinks": "Privacy - Terms",
+  "panel": "Robot verification challenges",
+  "refresh": "Regenerate this image challenge",
+  "machine": "Toggle machine vision diagnostics",
+  "help": "Show challenge hint",
+  "verify": "VERIFY",
+  "next": "NEXT →",
+  "finish": "FINISH",
+  "resume": "Resume current stage",
+  "reset": "Reset all progress",
+  "protocol": "ROBOT VERIFICATION PROTOCOL",
+  "initialStage": "256 stages · ∞ mode",
+  "fails": "{count} failed attempts",
+  "level": "LEVEL {number} · {type}",
+  "endless": "ENDLESS MODE · LEVEL {number}",
+  "complete": "ALL 256 COMPLETE · CLICK CHECKBOX FOR ∞",
+  "kindTwins": "CRC32 scan",
+  "kindSample": "channel parity",
+  "kindSignature": "LSB analysis",
+  "kindPython": "floating-point",
+  "stageMachine": "MACHINE-VISION AUTHENTICATION",
+  "stagePython": "NUMERICAL AUTHENTICATION",
+  "stageEndless": "INFINITE VERIFICATION",
+  "headSmallPixel": "Select all images with",
+  "headSmallPython": "Select the",
+  "twins": "different pixel fingerprints",
+  "twinsDetail": "Reference CRC32: 0x{crc} · Select ALL mismatches.",
+  "twinsHint": "Compare each tile's CRC32 to the reference. Usually only one bit of one color channel differs. Switch on machine vision to inspect exact values.",
+  "sample": "{color} bytes: {parity}",
+  "sampleDetail": "at pixel ({x}, {y}) · RGB origin is (0,0).",
+  "sampleHint": "Read the {color} channel at ({x}, {y}) for every image. Select only tiles with an {parity} byte. A one-unit RGB difference is not reliably visible to humans.",
+  "signature": "LSB: {bits}",
+  "signatureDetail": "Select matching 8-bit red-channel signatures.",
+  "signatureHint": "Read the least significant red-channel bit from eight hidden pixel positions in order. Combine them into an 8-bit binary signature; machine vision reveals it.",
+  "python": "actual Python output",
+  "pythonDetail": "Select the exact CPython 3.13 result.",
+  "pythonHint": "These answers were evaluated using CPython 3.13. Account for IEEE-754 binary64 rounding, exact comparisons, repr(), special float values, and version-specific behavior.",
+  "pyFootnote": "Choose the exact displayed Python result (repr-style). String values include quotation marks. Answers were evaluated in CPython 3.13, not inferred from JavaScript.",
+  "legendTwins": "1-channel / 1-bit perturbation",
+  "legendSample": "read target pixel parity",
+  "legendSignature": "embedded LSB watermark · 8 positions",
+  "visionOn": "VISION: ON",
+  "visionOff": "VISION: OFF",
+  "tip": "Pixel-level differences may be invisible to humans.\nClick the eye button inside the challenge box to enable machine-vision diagnostics.",
+  "disclaimer": "Standalone reCAPTCHA-style reverse verification game · Not affiliated with Google\nRuns offline · Saves progress locally · 256 stages + endless mode",
+  "wrong": "Verification failed. Exact machine-level agreement is required. Try again.",
+  "passed": "✓ ROBOT AUTHENTICATION PASSED · STAGE {number} COMPLETE.",
+  "allPassed": "✓ ALL 256 STAGES PASSED. ROBOT IDENTITY CONFIRMED.",
+  "finishSuccess": "✓ ROBOT VERIFICATION COMPLETE · 256 / 256 · CERTIFICATE UNLOCKED",
+  "alreadyFinished": "Robot identity already verified. Click the checkbox for endless mode, or reset to start over.",
+  "refreshed": "New image generated for the same stage. Pixel rules were recomputed.",
+  "confirmReset": "Clear all robot verification progress and restart from Stage 1?",
+  "tile": "Tile {number}",
+  "odd": "odd",
+  "even": "even",
+  "red": "red",
+  "green": "green",
+  "blue": "blue",
+  "tickboard": "STAGE CHECKMARK REGISTER",
+  "certReady": "CERTIFICATE READY",
+  "certLocked": "CERTIFICATE LOCKED",
+  "certMeta": "stages_passed = {stages}\nfailed_attempts = {fails}\nstatus = {status}\nserial = {serial}",
+  "certStatusLocked": "AWAITING_FULL_COMPLETION",
+  "certStatusReady": "CERTIFIED_ROBOT",
+  "certDownload": "DOWNLOAD ROBOT CERTIFICATE .PDF"
+};
+function t(key,vars={}){const str=STRINGS[key]??key;return str.replace(/\{(\w+)\}/g,(_,k)=>String(vars[k]??''))}
+let lang='en';
+let level=readNumber('robot_v2_level',1),failed=readNumber('robot_v2_fails',0),round=0,vision=false,verified=false,finished=readNumber('robot_v2_level',1)>TOTAL,loading=false;
+let current=null,selected=new Set(),picked=-1,notice=null,successNotice=null;
+
+const TIERS = [
+ {max:0,code:'T0',name:'OMEGA ZERO',designation:'FLAWLESS SYNTHETIC',color:'#baff5a'},
+ {max:3,code:'T1',name:'TITANIUM CORE',designation:'HIGH-PURITY MACHINE',color:'#70f1db'},
+ {max:15,code:'T2',name:'CHROME CLASS',designation:'PRECISION CALIBRATED',color:'#79b4ff'},
+ {max:49,code:'T3',name:'CIRCUIT TESTED',designation:'ADAPTIVE SYSTEM',color:'#ffc56e'},
+ {max:Infinity,code:'T4',name:'PATCHED CONSTRUCT',designation:'PERSISTENT MACHINE',color:'#ff8cc8'}
+];
+function getTier(){return TIERS.find(entry=>failed<=entry.max)}
+function safeLocalGet(key){try{return localStorage.getItem(key)}catch(e){return null}}
+function safeLocalSet(key,value){try{localStorage.setItem(key,value)}catch(e){}}
+let certificateIssuedUTC=safeLocalGet('robot_v5_completed_utc')||(finished?'LEGACY_RECORD_RESTORED':null);
+let lastPassedStage=Number(safeLocalGet('robot_v5_cleared_stage'))||0;
+let profile={name:safeLocalGet('robot_v5_name')||'', id:safeLocalGet('robot_v5_id')||''};
+function issueUnitId(){
+ const parts=new Uint8Array(4);
+ if(typeof crypto!=='undefined'&&crypto.getRandomValues)crypto.getRandomValues(parts);
+ else for(let i=0;i<4;i++)parts[i]=Math.floor(Math.random()*256);
+ return 'RX-'+Array.from(parts,b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+if(!profile.id){profile.id=issueUnitId();safeLocalSet('robot_v5_id',profile.id)}
+function currentName(){return (profile.name.trim()||'ANONYMOUS MACHINE').slice(0,36)}
+function currentRobotId(){return (profile.id.trim()||'UNIT-UNASSIGNED').slice(0,28)}
+const checkSVG='<svg viewBox="0 0 32 32" width="36" height="36" aria-hidden="true"><path fill="none" stroke="#00a35b" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" d="M4 17 12.5 25 28 6"/></svg>';
+function doneCount(){return finished?TOTAL:Math.min(level-1+((level<=TOTAL&&(verified||lastPassedStage===level))?1:0),TOTAL)}
+function stageSerial(){return 'RX-'+String(TOTAL).padStart(3,'0')+'-'+String(failed).padStart(4,'0')+'-'+String(doneCount()).padStart(3,'0')}
+
+function readNumber(key,fallback){try{let x=Number(localStorage.getItem(key));return Number.isSafeInteger(x)&&x>=0?(x||fallback):fallback}catch(e){return fallback}}
+function save(){try{localStorage.setItem('robot_v2_level',String(level));localStorage.setItem('robot_v2_fails',String(failed))}catch(e){}}
+function message(key=null,vars={},ok=false){notice=key?{key,vars,ok}:null;paintMessages()}
+function paintMessages(){el.feedback.classList.toggle('ok',!!notice?.ok);el.feedback.textContent=notice?(notice.raw??t(notice.key,notice.vars)):'';el.success.textContent=successNotice?t(successNotice):''}
+function buildTickboard(){
+  if(el.tickboard.children.length) return;
+  const frag=document.createDocumentFragment();
+  for(let i=1;i<=TOTAL;i++){const s=document.createElement('span');s.className='tickcell future';s.textContent='✓';s.setAttribute('aria-label','Stage '+i);frag.appendChild(s)}
+  el.tickboard.appendChild(frag);
+}
+function updateStatic(){
+  document.documentElement.lang='en';document.title=t('title');
+  document.querySelector('.anchor').setAttribute('aria-label',t('anchor'));el.tick.setAttribute('aria-label',t('checkboxAria'));el.prompt.textContent=t('checkbox');
+  document.querySelector('.brand').setAttribute('aria-label',t('brand'));document.querySelector('.brand-links').textContent=t('brandLinks');el.panel.setAttribute('aria-label',t('panel'));
+  for(const id of ['refresh','machine','help']){$(id).title=t(id);$(id).setAttribute('aria-label',t(id))}
+  el.verify.textContent=t(verified?(level===TOTAL?'finish':'next'):'verify');$('resume').textContent=t('resume');$('reset').textContent=t('reset');$('protocol-label').textContent=t('protocol');
+  $('py-footnote').textContent='section .rodata   |   case_X: db ... , 0x00';$('small-tip').textContent=t('tip');$('disclaimer').textContent=t('disclaimer');el['tickboard-label'].textContent=t('tickboard');el['download-cert'].textContent=t('certDownload');
+  buildTickboard();paintMessages();updateCertificate();
+}
+
+function RNG(seed){let x=(seed>>>0)||0x9e3779b9;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return (x>>>0)/4294967296}}
+function ri(r,min,max){return min+Math.floor(r()*(max-min+1))}
+function shuffle(a,r){for(let i=a.length-1;i>0;i--){let j=ri(r,0,i);[a[j],a[i]]=[a[i],a[j]]}return a}
+function imageFrame(seed,scene){
+  // Create one densely textured 168x168 scene per stage. Then mutate ONLY byte-level data per tile.
+  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const cx=canvas.getContext('2d',{willReadFrequently:true});
+  const r=RNG(seed), img=cx.createImageData(W,H);let p=img.data;
+  const bases=[[28,48,62],[57,51,76],[31,69,78],[61,64,53],[45,45,73],[55,45,42],[35,56,69]];
+  const b=bases[scene%bases.length];let rowWave=new Float32Array(H);
+  for(let y=0;y<H;y++)rowWave[y]=Math.sin(y*.17+scene)*7+Math.cos(y*.037+scene)*8;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=4*(y*W+x),speck=(r()-.5)*70,gradient=(x+y)/(W+H)*28;
+    const wave=10*Math.sin(x*.12+Math.sin(y*.08)*3)+12*Math.cos(y*.095-x*.06);
+    p[i]=Math.max(0,Math.min(255,b[0]+speck+gradient+wave+rowWave[y]));
+    p[i+1]=Math.max(0,Math.min(255,b[1]+speck*.7+gradient+wave*.65));
+    p[i+2]=Math.max(0,Math.min(255,b[2]+speck*.5+gradient*1.3+wave*.45));p[i+3]=255;
+  }
+  cx.putImageData(img,0,0);
+  if(scene%7===0 || scene%7===4){ // dense circuit traces
+    cx.lineCap='round';
+    for(let i=0;i<155;i++){
+      const x=ri(r,0,W),y=ri(r,0,H),dist=ri(r,8,62);
+      cx.strokeStyle=['#72c9b39a','#edd47d7d','#cce4f277','#75a0da88'][i%4];cx.lineWidth=.45+r()*1.1;
+      cx.beginPath();cx.moveTo(x,y);cx.lineTo(x+dist*(r()>.5?1:-1),y);cx.lineTo(x+dist*(r()>.5?1:-1),y+ri(r,-25,25));cx.stroke();
+      cx.beginPath();cx.fillStyle='#d5ebe288';cx.arc(x,y,r()*2+.5,0,Math.PI*2);cx.fill();
+    }
+    for(let i=0;i<44;i++){let x=ri(r,0,160),y=ri(r,0,160);cx.fillStyle='#1b344bb3';cx.fillRect(x,y,ri(r,4,13),ri(r,3,11));cx.strokeStyle='#93d5ce88';cx.strokeRect(x,y,ri(r,4,13),ri(r,3,11))}
+  }else if(scene%7===1 || scene%7===5){ // overhead city blocks / roads
+    for(let i=0;i<90;i++){
+      const x=ri(r,0,W),y=ri(r,0,H),ww=ri(r,7,34),hh=ri(r,7,35);
+      cx.fillStyle=['#868b82a8','#bcc0aa8d','#374853cc','#b09c91cc'][ri(r,0,3)];cx.fillRect(x,y,ww,hh);
+      cx.strokeStyle='#e4dfc35e';cx.lineWidth=1;cx.strokeRect(x+.5,y+.5,ww-1,hh-1);
+      for(let z=0;z<10;z++){cx.fillStyle=ri(r,0,3)?'#c5b6a290':'#f7debab5';cx.fillRect(x+ri(r,1,ww),y+ri(r,1,hh),1,1)}
+    }
+    for(let i=0;i<16;i++){cx.strokeStyle='#b9aa8b7e';cx.lineWidth=ri(r,2,5);cx.beginPath();cx.moveTo(ri(r,0,W),0);cx.lineTo(ri(r,0,W),H);cx.stroke()}
+  }else if(scene%7===2){ // chaotic dense technical maps
+    for(let i=0;i<125;i++){
+      cx.strokeStyle=['#91dbc077','#ddc599a0','#b0ccef72','#f3e7df78'][i%4];cx.lineWidth=.5+r()*.7;
+      cx.beginPath();let x=ri(r,0,W),y=ri(r,0,H);cx.moveTo(x,y);for(let j=0;j<ri(r,2,6);j++)cx.lineTo(x+=ri(r,-22,22),y+=ri(r,-22,22));cx.stroke();
+    }
+    for(let i=0;i<75;i++){cx.strokeStyle='#90d1be63';cx.beginPath();cx.arc(ri(r,0,W),ri(r,0,H),ri(r,2,25),r()*Math.PI,r()*Math.PI*2);cx.stroke()}
+  }else if(scene%7===3){ // scientific microscopy / protein-like clusters
+    for(let i=0;i<190;i++){
+      const x=ri(r,0,W),y=ri(r,0,H),rr=ri(r,1,15);cx.beginPath();cx.arc(x,y,rr,0,Math.PI*2);
+      cx.fillStyle=['#92bfc34f','#a4a2c083','#dcd2b35c','#649a9c83'][i%4];cx.fill();
+      cx.strokeStyle='#dbe8dd66';cx.lineWidth=.6;cx.stroke();
+    }
+    for(let i=0;i<66;i++){let x=ri(r,0,W),y=ri(r,0,H);cx.strokeStyle='#e7efeb65';cx.lineWidth=.7;cx.beginPath();cx.moveTo(x,y);cx.bezierCurveTo(x+ri(r,-30,30),y+ri(r,-30,30),x+ri(r,-30,30),y+ri(r,-30,30),x+ri(r,-40,40),y+ri(r,-40,40));cx.stroke()}
+  }else{ // complex astronomical scans
+    for(let i=0;i<190;i++){
+      cx.fillStyle=['#e2f1f8b5','#88aee4bf','#f9d08dba'][i%3];cx.fillRect(ri(r,0,W),ri(r,0,H),r()*1.6+.3,r()*1.6+.3);
+    }
+    for(let i=0;i<45;i++){cx.beginPath();cx.arc(ri(r,0,W),ri(r,0,H),ri(r,4,40),0,Math.PI*2);cx.strokeStyle='#96b0d04f';cx.lineWidth=r()*1.4+.2;cx.stroke()}
+  }
+  for(let k=0;k<140;k++){
+    const x=ri(r,0,W),y=ri(r,0,H);
+    cx.fillStyle=['#daeae3a0','#a3d7dac7','#edd9bd93'][k%3];cx.font=ri(r,4,7)+'px monospace';cx.fillText(ri(r,0,9).toString(16).toUpperCase(),x,y);
+  }
+  for(let k=0;k<16;k++){
+    cx.strokeStyle='#d9e9dd2d';cx.beginPath();cx.moveTo(ri(r,0,W),0);cx.lineTo(ri(r,0,W),H);cx.stroke();
+  }
+  return cx.getImageData(0,0,W,H);
+}
+const crcTable=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
+function crc(data){let c=0xffffffff;for(let k=0;k<data.length;k++)c=crcTable[(c^data[k])&255]^(c>>>8);return ((c^0xffffffff)>>>0).toString(16).toUpperCase().padStart(8,'0')}
+function dataUrl(arr){const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d');c.putImageData(new ImageData(arr,W,H),0,0);return canvas.toDataURL('image/png')}
+function patch(data,x,y,channel,bit){const idx=(y*W+x)*4+channel;data[idx]=(data[idx]&254)|(bit&1)}
+function chooseCorrect(r){const a=shuffle(Array.from({length:9},(_,i)=>i),r);return new Set(a.slice(0,ri(r,3,5)))}
+function createPixel(level, variant, type){
+  const seed=(Math.imul(level+31,2654435761)^Math.imul(variant+7,1597334677))>>>0,r=RNG(seed),scene=ri(r,0,6),base=imageFrame(seed,scene);
+  const reference=crc(base.data),correct=chooseCorrect(r),output=[];
+  const targetX=ri(r,20,W-20),targetY=ri(r,20,H-20),channel=ri(r,0,2),targetBit=ri(r,0,1);
+  const signature=[0xA5,0x96,0x3C,0xC3,0xD2,0xB6,0x5A,0x69][ri(r,0,7)];
+  const locations=Array.from({length:8},(_,i)=>[14+i*18,13+(i*37)%130]);
+  for(let i=0;i<9;i++){
+    const data=new Uint8ClampedArray(base.data),isRight=correct.has(i);let diag='';
+    if(type==='twins'){
+      if(isRight){let x=ri(r,3,W-4),y=ri(r,3,H-4),ch=ri(r,0,2);data[(y*W+x)*4+ch]^=1}
+      diag='CRC '+crc(data);
+    }else if(type==='sample'){
+      patch(data,targetX,targetY,channel,isRight?targetBit:1-targetBit);
+      diag=`${['R','G','B'][channel]}@${targetX},${targetY}: ${data[(targetY*W+targetX)*4+channel]}`;
+    }else{
+      let byte=isRight?signature:ri(r,0,255);if(!isRight&&byte===signature)byte^=0x20;
+      for(let bit=0;bit<8;bit++){const [x,y]=locations[bit];patch(data,x,y,0,(byte>>(7-bit))&1)}
+      let measured=0;for(const [x,y] of locations)measured=(measured<<1)|(data[(y*W+x)*4]&1);
+      diag='LSB '+measured.toString(2).padStart(8,'0');
+    }
+    output.push({src:dataUrl(data),correct:isRight,diag});
+  }
+  return {type:'pixels',variant:type,items:output,reference,targetX,targetY,channel,targetBit,signature};
+}
+function createPython(level){
+  const index=(Math.floor((level-1)/4))%FLOAT_BANK.length,q=FLOAT_BANK[index],r=RNG((Math.imul(level,3948303911)^0xa0b28341)>>>0);
+  const choices=shuffle(q.choices.map(text=>({text,correct:text===q.correct})),r);
+  return {type:'python',code:q.code,choices};
+}
+function hex8(n){return '0x'+(n>>>0).toString(16).toUpperCase().padStart(2,'0')}
+function hex32(n){return '0x'+(n>>>0).toString(16).toUpperCase().padStart(8,'0')}
+function asmHexBytes(s){return Array.from(new TextEncoder().encode(s),b=>hex8(b))}
+function asmDb(s,indent='    ',group=10){
+  const bytes=[...asmHexBytes(s),'0x00'],lines=[];
+  for(let i=0;i<bytes.length;i+=group)lines.push(indent+'db '+bytes.slice(i,i+group).join(', '));
+  return lines.join('\n');
+}
+function asmPrompt(){
+  const common='BITS 64\ndefault rel';
+  if(current.type==='python'){
+    // The bytes are Python source; CPython itself performs evaluation and repr.
+    // x86-64 SysV ABI. `globals_dict` is supplied by the host and includes math.
+    const program=[
+      common,
+      'extern PyRun_StringFlags',
+      'extern PyObject_Repr',
+      'extern PyUnicode_AsUTF8',
+      'extern globals_dict, out_utf8',
+      'section .text',
+      'eval_0:',
+      '    push rbp',
+      '    mov rbp, rsp',
+      '    lea rdi, [rel expr_utf8]',
+      '    mov esi, 0x102',
+      '    mov rdx, [rel globals_dict]',
+      '    mov rcx, rdx',
+      '    xor r8d, r8d',
+      '    call PyRun_StringFlags',
+      '    test rax, rax',
+      '    jz .error',
+      '    mov rdi, rax',
+      '    call PyObject_Repr',
+      '    test rax, rax',
+      '    jz .error',
+      '    mov rdi, rax',
+      '    call PyUnicode_AsUTF8',
+      '    mov [rel out_utf8], rax',
+      '    leave',
+      '    ret',
+      '.error:',
+      '    xor eax, eax',
+      '    leave',
+      '    ret',
+      'section .rodata',
+      'expr_utf8:',
+      asmDb(current.code),
+    ].join('\n');
+    return {small:'BITS 64 · SYSV',big:'PyRun_StringFlags',detail:'call PyObject_Repr',program,
+      hint:'mov esi, 0x102\ncall PyRun_StringFlags\ncall PyObject_Repr\ncall PyUnicode_AsUTF8',
+      legend:'call PyUnicode_AsUTF8'};
+  }
+  const outer='entry:\n    push rbp\n    mov rbp, rsp\n    push rbx\n    push r12\n    xor r12d, r12d\n.tile_loop:';
+  const tail='    inc r12d\n    cmp r12d, 0x09\n    jb .tile_loop\n    pop r12\n    pop rbx\n    pop rbp\n    ret';
+  if(current.variant==='twins'){
+    const program=[common,'extern crc32_ieee_rgba','extern rgba_ptrs, flags','section .text',outer,
+      '    lea r10, [rel rgba_ptrs]',
+      '    mov rdi, [r10 + r12*8]',
+      '    mov esi, 0x1B900',
+      '    call crc32_ieee_rgba',
+      '    cmp eax, 0x'+current.reference,
+      '    lea r10, [rel flags]',
+      '    setne byte [r10 + r12]',tail].join('\n');
+    return {small:'BITS 64 · RGBA8888',big:'CRC32_SCAN',detail:'cmp eax, 0x'+current.reference,program,
+      hint:'mov esi, 0x1B900\ncall crc32_ieee_rgba\ncmp eax, 0x'+current.reference+'\nsetne al',legend:'setne byte [flags+r12]'};
+  }
+  if(current.variant==='sample'){
+    const offset=((current.targetY*W+current.targetX)*4+current.channel),
+      bytes='0x'+offset.toString(16).toUpperCase(), bit=current.targetBit;
+    const program=[common,'extern rgba_ptrs, flags','section .text',outer,
+      '    lea r10, [rel rgba_ptrs]',
+      '    mov rbx, [r10 + r12*8]',
+      '    movzx eax, byte [rbx + '+bytes+']',
+      '    and eax, 0x01',
+      '    cmp eax, '+hex8(bit),
+      '    lea r10, [rel flags]',
+      '    sete byte [r10 + r12]',tail].join('\n');
+    return {small:'BITS 64 · RGBA8888',big:'CHANNEL_PARITY',detail:'cmp eax, '+hex8(bit),program,
+      hint:'movzx eax, byte [rbx + '+bytes+']\nand eax, 0x01\ncmp eax, '+hex8(bit)+'\nsete al',legend:'and eax, 0x01'};
+  }
+  const locations=Array.from({length:8},(_,i)=>[14+i*18,13+(i*37)%130]);
+  const offsets=locations.map(([x,y])=>(y*W+x)*4),sig=hex8(current.signature);
+  const program=[common,'extern rgba_ptrs, flags','section .text',outer,
+    '    lea r10, [rel rgba_ptrs]',
+      '    mov rbx, [r10 + r12*8]',
+    '    lea rsi, [rel lsb_offsets]',
+    '    xor ecx, ecx',
+    '    xor edx, edx',
+    '.bit_loop:',
+    '    mov r8, [rsi + rcx*8]',
+    '    movzx eax, byte [rbx + r8]',
+    '    and eax, 0x01',
+    '    shl edx, 0x01',
+    '    or edx, eax',
+    '    inc ecx',
+    '    cmp ecx, 0x08',
+    '    jb .bit_loop',
+    '    cmp dl, '+sig,
+    '    lea r10, [rel flags]',
+      '    sete byte [r10 + r12]',tail,
+    'section .rodata',
+    'lsb_offsets:',
+    ...offsets.map((o,i)=>'    dq 0x'+o.toString(16).toUpperCase()+(i===0?'':''))].join('\n');
+  return {small:'BITS 64 · RGBA8888',big:'LSB8_MATCH',detail:'cmp dl, '+sig,program,
+    hint:'and eax, 0x01\nshl edx, 0x01\nor edx, eax\ncmp dl, '+sig+'\nsete al',legend:'cmp dl, '+sig};
+}
+function updateCheckbox(state){
+  if(state==='checked'){el.square.className='square checked';el.square.innerHTML=checkSVG;el.tick.setAttribute('aria-pressed','true')}
+  else if(state==='loading'){el.square.className='square loading';el.square.innerHTML='';el.tick.setAttribute('aria-pressed','false')}
+  else{el.square.className='square';el.square.innerHTML='';el.tick.setAttribute('aria-pressed','false')}
+}
+function updateCertificate(){
+  const done=doneCount(), ready=done>=TOTAL, tier=getTier();
+  el['certificate-box'].classList.toggle('show',ready);
+  el['certificate-title'].textContent=ready?'[ CERTIFICATE / RELEASED ]':'[ CERTIFICATE / LOCKED ]';
+  el['cert-tier'].textContent=tier.code+' // '+tier.name+' // '+tier.designation;
+  el['cert-tier'].style.color=tier.color;
+  el['certificate-meta'].textContent='stage_register = '+String(done).padStart(3,'0')+'/256\n' +
+    'failed_attempts = '+failed+'\n' +
+    'classification = '+tier.code+'\n' +
+    'subject = '+currentName()+'\n' +
+    'robot_id = '+currentRobotId();
+  el['cert-lock'].textContent=ready?'CERTIFICATE SIGNED BY LOCAL GAME STATE':'PDF RELEASE CONDITION: 256 / 256 PASSED';
+  el['download-cert'].textContent=ready?'DOWNLOAD CERTIFICATE .PDF':'PDF GENERATION LOCKED';
+  el['download-cert'].disabled=!ready;
+}
+function updateTickboard(){
+  buildTickboard();
+  const done=doneCount();
+  Array.from(el.tickboard.children).forEach((node,idx)=>{const stage=idx+1;node.className='tickcell '+(stage<=done?'done':(stage===Math.min(level,TOTAL)&&!finished?'current':'future'));});
+  el['tickboard-count'].textContent=done+' / '+TOTAL;
+}
+function roundedRect(ctx,x,y,w,h,r,fill,stroke){
+ ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.stroke()}
+}
+function clipText(ctx,text,maxWidth,font){
+ ctx.font=font;let value=String(text);
+ while(value.length>1&&ctx.measureText(value).width>maxWidth)value=value.slice(0,-2)+'…';
+ return value;
+}
+function paintCertificate(){
+ const canvas=document.createElement('canvas'),W=1190,H=1684;
+ canvas.width=W;canvas.height=H;
+ const c=canvas.getContext('2d'),tier=getTier(),accent=tier.color;
+ const mono='"Courier New", Consolas, monospace',wide='Arial, Helvetica, sans-serif';
+ const field=(x,y,label,value)=>{
+   c.fillStyle='#667784';c.font='bold 17px '+mono;c.fillText(label,x,y);
+   c.fillStyle='#e7f5ec';c.font='bold 31px '+mono;
+   c.fillText(clipText(c,value,480,'bold 31px '+mono),x,y+45)
+ };
+ c.fillStyle='#071018';c.fillRect(0,0,W,H);
+ // Machine schematic rails and etched background.
+ c.strokeStyle='#172a31';c.lineWidth=2;
+ for(let x=0;x<W;x+=39){c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke()}
+ for(let y=0;y<H;y+=39){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke()}
+ c.lineWidth=6;c.strokeStyle='#789187';c.strokeRect(47,47,W-94,H-94);
+ c.lineWidth=2;c.strokeStyle=accent;c.strokeRect(62,62,W-124,H-124);
+ c.fillStyle='#0a161d';c.fillRect(87,86,W-174,H-140);
+ // Header
+ c.fillStyle=accent;c.fillRect(95,100,14,93);
+ c.fillStyle='#b4c6c6';c.font='bold 19px '+mono;c.fillText('ROBOT AUTHENTICATION PROTOCOL // SIMULATION',129,125);
+ c.fillStyle='#6d8784';c.font='16px '+mono;c.fillText('ASSEMBLY CERTIFICATION · REVERSE CAPTCHA · REV 5.0',129,160);
+ c.fillStyle='#e8f6ed';c.font='900 79px '+wide;c.fillText('CERTIFIED',95,286);
+ c.fillStyle=accent;c.font='900 133px '+wide;c.fillText('ROBOT',90,401);
+ // warning stencil
+ c.fillStyle='#192428';c.fillRect(95,430,1000,58);
+ c.fillStyle='#ffc96f';c.font='bold 22px '+mono;c.fillText('UNIT RECOGNIZED // HUMAN COMPATIBILITY: NOT TESTED',118,466);
+ // class
+ c.fillStyle='#8ca9a1';c.font='bold 19px '+mono;c.fillText('CLASSIFICATION MATRIX / RETRY-BASED',96,555);
+ c.fillStyle=accent;c.fillRect(95,578,1000,4);
+ c.fillStyle='#e8f5e8';c.font='bold 56px '+mono;c.fillText(tier.name,94,658);
+ c.fillStyle='#9bc0aa';c.font='24px '+mono;c.fillText(tier.code+' :: '+tier.designation,98,698);
+ for(let i=0;i<5;i++){
+   const x=95+i*203;c.fillStyle=i<=TIERS.indexOf(tier)?accent:'#263943';c.fillRect(x,730,187,15)
+ }
+ // Identity fields
+ field(98,824,'OPERATOR / PLAYER NAME',currentName());
+ field(98,944,'ROBOT UNIT ID',currentRobotId());
+ c.fillStyle='#344c4c';c.fillRect(95,1012,1000,1);
+ // Assembly blocks
+ c.fillStyle='#09161a';c.fillRect(94,1050,1001,300);
+ c.strokeStyle='#335345';c.lineWidth=2;c.strokeRect(94,1050,1001,300);
+ c.fillStyle=accent;c.font='bold 21px '+mono;c.fillText('SECTION .VERIFIED',124,1100);
+ const lines=[
+   'BITS 64',
+   'mov eax, 0x00000100    ; 256 / 256 PASSED',
+   'mov ebx, '+String(failed).padStart(6,'0')+'        ; FAILED ATTEMPTS',
+   'cmp eax, 0x00000100',
+   'jne certificate_locked',
+   'mov byte [ROBOT_FLAG], 0x01',
+   'ret'
+ ];
+ c.font='20px '+mono;c.fillStyle='#b7e6bf';
+ lines.forEach((line,i)=>c.fillText(line,130,1144+i*28));
+ // 256 binary register / dot matrix, decorative yet countable
+ c.fillStyle='#7c9990';c.font='bold 18px '+mono;c.fillText('256-BIT COMPLETION REGISTER',95,1388);
+ const gap=5,dw=38,dh=9;
+ for(let i=0;i<256;i++){let row=Math.floor(i/32),col=i%32;c.fillStyle=accent;c.fillRect(96+col*31.2,1414+row*15,22,9)}
+ // footer
+ c.fillStyle='#4d7770';c.fillRect(95,1548,1000,2);
+ c.fillStyle='#88a99c';c.font='16px '+mono;
+ c.fillText('STAMP: '+(certificateIssuedUTC||'LOCAL COMPLETION'),98,1584);
+ c.fillText('SERIAL: '+stageSerial(),98,1610);
+ c.textAlign='right';c.fillStyle='#d4a96c';c.fillText('UNOFFICIAL / ENTERTAINMENT ONLY',1091,1584);c.textAlign='left';
+ return canvas;
+}
+function makeImagePdf(canvas){
+ const b64=canvas.toDataURL('image/jpeg',0.95).split(',')[1],bin=atob(b64);
+ const image=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)image[i]=bin.charCodeAt(i);
+ const enc=new TextEncoder(),pieces=[];let offset=0;const xrefs=[0];
+ const emit=data=>{const bytes=typeof data==='string'?enc.encode(data):data;pieces.push(bytes);offset+=bytes.length};
+ const obj=(index,content)=>{xrefs[index]=offset;emit(index+' 0 obj\n'+content+'\nendobj\n')};
+ emit('%PDF-1.4\n%ROBOT-CERT\n');
+ obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+ obj(2,'<< /Type /Pages /Count 1 /Kids [3 0 R] >>');
+ obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+ xrefs[4]=offset;
+ emit('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+canvas.width+' /Height '+canvas.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+image.length+' >>\nstream\n');
+ emit(image);emit('\nendstream\nendobj\n');
+ const commands='q\n595 0 0 842 0 0 cm\n/Im0 Do\nQ\n';
+ obj(5,'<< /Length '+enc.encode(commands).length+' >>\nstream\n'+commands+'endstream');
+ const startxref=offset;emit('xref\n0 6\n0000000000 65535 f \n');
+ for(let i=1;i<=5;i++)emit(String(xrefs[i]).padStart(10,'0')+' 00000 n \n');
+ emit('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+startxref+'\n%%EOF');
+ return new Blob(pieces,{type:'application/pdf'});
+}
+function downloadCertificate(){
+ if(doneCount()<TOTAL)return;
+ const canvas=paintCertificate(), blob=makeImagePdf(canvas),url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;a.download='robot_certificate_'+stageSerial()+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+function generate(){
+  const type=['twins','sample','signature','python'][(level-1)%4];
+  current=type==='python'?createPython(level):createPixel(level,round,type);
+  selected.clear();picked=-1;verified=(level<=TOTAL&&lastPassedStage===level);
+  message();render();
+  if(verified){updateCheckbox('checked');message('passed',{number:level},true)}
+}
+function updateProgress(){
+  const done=doneCount();
+  el['progress-caption'].textContent=(level>TOTAL?TOTAL:done)+' / '+TOTAL+(level>TOTAL?' · ∞':'');
+  el['progress-fill'].style.width=(done/TOTAL*100)+'%';el.attempts.textContent=t('fails',{count:failed});
+  const kind=['kindTwins','kindSample','kindSignature','kindPython'][(Math.max(level,1)-1)%4];
+  el['stage-kind'].textContent=finished?t('complete'):(level>TOTAL?t('endless',{number:level}):t('level',{number:String(level).padStart(3,'0'),type:t(kind)}));
+  updateTickboard(); updateCertificate();
+}
+function render(){
+  if(!current)return;updateProgress();
+  const info=asmPrompt(),isPython=current.type==='python';
+  el['level-num'].textContent=level>TOTAL?('∞ · '+level):String(level).padStart(3,'0')+' / 256';
+  el['stage-tag'].textContent=isPython?'extern PyRun_StringFlags':'section .text';
+  el['head-small'].textContent=info.small;el['head-big'].textContent=info.big;el['head-note'].textContent=info.detail;
+  el['asm-spec'].style.display=isPython?'none':'block';if(!isPython)el['asm-spec'].textContent=info.program;
+  el.tiles.style.display=isPython?'none':'grid';el['py-stage'].style.display=isPython?'block':'none';el.legend.style.display=isPython?'none':'flex';
+  el.machine.style.visibility=isPython?'hidden':'visible';el.refresh.style.visibility=isPython?'hidden':'visible';
+  if(isPython){
+    el['python-code'].textContent=info.program;el.answers.replaceChildren();
+    current.choices.forEach((choice,i)=>{const b=document.createElement('button');b.className='answer'+(i===picked?' sel':'');b.type='button';b.textContent='case_'+String.fromCharCode(65+i)+':  '+asmDb(choice.text,'',18).replace(/^db /,'db ');b.disabled=verified;b.setAttribute('aria-pressed',String(i===picked));
+      b.onclick=()=>{if(verified)return;picked=i;message();renderChoices()};el.answers.appendChild(b)});
+  }else{
+    el.tiles.replaceChildren();current.items.forEach((item,i)=>{
+      const button=document.createElement('button');button.type='button';button.className='tile'+(selected.has(i)?' sel':'');button.setAttribute('aria-label',t('tile',{number:i+1})+(vision?' '+item.diag:''));button.setAttribute('aria-pressed',String(selected.has(i)));button.disabled=verified;
+      const img=document.createElement('img');img.src=item.src;img.alt='';img.draggable=false;button.appendChild(img);
+      if(vision){const d=document.createElement('span');d.className='diagnostic';d.textContent=item.diag;button.appendChild(d)}
+      button.onclick=()=>{if(verified)return;if(selected.has(i))selected.delete(i);else selected.add(i);message();renderTiles()};el.tiles.appendChild(button)
+    });
+    el['legend-left'].textContent=info.legend;
+    el['legend-right'].textContent=vision?'DIAG=0x01':'DIAG=0x00';el.machine.classList.toggle('active',vision);el.machine.setAttribute('aria-pressed',String(vision));
+  }
+  el.verify.textContent=t(verified?(level===TOTAL?'finish':'next'):'verify');
+}
+function renderTiles(){Array.from(el.tiles.children).forEach((node,i)=>{node.classList.toggle('sel',selected.has(i));node.setAttribute('aria-pressed',String(selected.has(i)))});}
+function renderChoices(){Array.from(el.answers.children).forEach((node,i)=>{node.classList.toggle('sel',i===picked);node.setAttribute('aria-pressed',String(i===picked))});}
+function begin(){if(loading)return;updateCheckbox(verified?'checked':'empty');el.panel.classList.add('open');if(!current)generate();}
+function openFromCheckbox(){
+  if(loading)return;loading=true;updateCheckbox('loading');
+  setTimeout(()=>{loading=false;if(finished){el.panel.classList.add('open');generateEndless();return}begin()},500);
+}
+function passStage(){
+  verified=true; if(level<=TOTAL){lastPassedStage=level;safeLocalSet('robot_v5_cleared_stage',String(level))} if(level===TOTAL&&!certificateIssuedUTC){certificateIssuedUTC=new Date().toISOString();safeLocalSet('robot_v5_completed_utc',certificateIssuedUTC)} updateCheckbox('checked');message(level===TOTAL?'allPassed':'passed',{number:level},true);
+  el.verify.textContent=t(level===TOTAL?'finish':'next');Array.from(el.tiles.children).forEach(x=>x.disabled=true);Array.from(el.answers.children).forEach(x=>x.disabled=true);updateProgress();
+}
+function finish(){
+  finished=true;if(!certificateIssuedUTC){certificateIssuedUTC=new Date().toISOString();safeLocalSet('robot_v5_completed_utc',certificateIssuedUTC)}el.panel.classList.remove('open');updateCheckbox('checked');
+  successNotice='finishSuccess';current=null;selected.clear();message();updateProgress();
+}
+function next(){
+  if(level===TOTAL){level++;save();finish();return}
+  level++;round=0;lastPassedStage=0;safeLocalSet('robot_v5_cleared_stage','0');save();updateCheckbox('empty');generate()
+}
+function verify(){
+  if(!current||finished)return;if(verified){next();return}let valid=false;
+  if(current.type==='python'){valid=picked!==-1&&current.choices[picked].correct}
+  else{valid=selected.size===current.items.filter(x=>x.correct).length&&[...selected].every(i=>current.items[i].correct)}
+  if(valid){passStage()}
+  else{failed++;save();updateProgress();message('wrong');if(current.type==='python')picked=-1;else selected.clear();current.type==='python'?renderChoices():renderTiles()}
+}
+function reset(){
+  if(!confirm(t('confirmReset')))return;
+  level=1;round=0;failed=0;finished=false;vision=false;current=null;verified=false;lastPassedStage=0;certificateIssuedUTC=null;safeLocalSet('robot_v5_cleared_stage','0');try{localStorage.removeItem('robot_v5_completed_utc')}catch(e){}selected.clear();picked=-1;successNotice=null;
+  updateCheckbox('empty');message();save();el.panel.classList.remove('open');updateProgress();
+}
+function generateEndless(){ finished=false; if(level<=TOTAL) level=TOTAL+1; round=0; updateCheckbox('empty'); generate(); }
+function refresh(){if(!current||current.type!=='pixels'||verified)return;round++;generate();message('refreshed');}
+function toggleVision(){if(!current||current.type==='python')return;vision=!vision;render();}
+function help(){if(!current)return;const info=asmPrompt();notice={raw:info.hint,ok:false};paintMessages();}
+
+el.tick.onclick=openFromCheckbox;el.prompt.onclick=openFromCheckbox;el.verify.onclick=verify;el.refresh.onclick=refresh;el.machine.onclick=toggleVision;$('help').onclick=help;$('reset').onclick=reset;$('resume').onclick=()=>{if(finished){openFromCheckbox();return}begin();el.panel.scrollIntoView({behavior:'smooth',block:'nearest'})};el['download-cert'].onclick=downloadCertificate;
+function refreshProfile(){
+ profile.name=el['player-name'].value.slice(0,36);profile.id=el['robot-id'].value.slice(0,28);
+ safeLocalSet('robot_v5_name',profile.name);safeLocalSet('robot_v5_id',profile.id);updateCertificate();
+}
+el['player-name'].value=profile.name;el['robot-id'].value=profile.id;
+el['player-name'].addEventListener('input',refreshProfile);
+el['robot-id'].addEventListener('input',refreshProfile);
+
+window.addEventListener('keydown',e=>{if(!el.panel.classList.contains('open'))return;if(e.key==='Enter'&&!e.repeat&&e.target.tagName!=='BUTTON')verify();if(/^[1-9]$/.test(e.key)&&current?.type==='pixels'){let i=Number(e.key)-1;if(selected.has(i))selected.delete(i);else selected.add(i);renderTiles()}});
+updateStatic();if(finished)updateCheckbox('checked');else updateCheckbox('empty');updateProgress();
+
+})();
+</script>
+</body>
+</html>
